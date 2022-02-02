@@ -1,0 +1,50 @@
+x-uffizzi:
+  ingress:                   # required
+    service: inv  # the service that should receive https traffic
+    port: 3000      # the port this service listens on
+  continuous_previews:
+    deploy_preview_when_pull_request_is_opened: true
+    delete_preview_when_pull_request_is_closed: true
+    share_to_github: true
+services:  
+  postgres:
+    image: postgres:10
+    restart: unless-stopped
+    volumes:
+      - postgresdata:/var/lib/postgresql/data
+      - ./config/sql:/config/sql
+      - ./docker/init-invidious-db.sh:/docker-entrypoint-initdb.d/init-invidious-db.sh
+    environment:
+      POSTGRES_DB: invidious
+      POSTGRES_PASSWORD: kemal
+      POSTGRES_USER: kemal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+  inv:
+    image: quay.io/invidious/invidious:latest
+    restart: unless-stopped
+    environment:
+      # Adapted from ./config/config.yml
+      INVIDIOUS_CONFIG: |
+        channel_threads: 1
+        check_tables: true
+        feed_threads: 1
+        db:
+          user: kemal
+          password: kemal
+          host: postgres
+          port: 5432
+          dbname: invidious
+        full_refresh: false
+        https_only: false
+        domain: deployment-530.allinv.app.uffizzi.com
+    healthcheck:
+      test: wget -nv --tries=1 --spider http://127.0.0.1:3000/api/v1/comments/jNQXAC9IVRw || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 2
+    depends_on:
+      - postgres
+
+volumes:
+  postgresdata:
